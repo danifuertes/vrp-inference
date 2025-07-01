@@ -1,6 +1,7 @@
 from torch.utils.data import Dataset
-import torch
 import os
+import json
+import torch
 import pickle
 from problems.tsp.state_tsp import StateTSP
 from utils.beam_search import beam_search
@@ -59,11 +60,20 @@ class TSPDataset(Dataset):
 
         self.data_set = []
         if filename is not None:
-            assert os.path.splitext(filename)[1] == '.pkl'
-
-            with open(filename, 'rb') as f:
-                data = pickle.load(f)
-                self.data = [torch.FloatTensor(row) for row in (data[offset:offset+num_samples])]
+            assert os.path.isfile(filename), f"File {filename} does not exist"
+            
+            ending = os.path.splitext(filename)[1]
+            if ending == '.pkl':
+                with open(filename, 'rb') as f:
+                    data = pickle.load(f)
+                    self.data = [torch.FloatTensor(row) for row in (data[offset:offset+num_samples])]
+            elif ending == '.json':
+                assert num_samples == 1, f"JSON format only supports num_samples=1, got {num_samples}"
+                with open(filename, 'r') as f:
+                    data = [json.load(f)['nodes']]
+                    self.data = [torch.FloatTensor(row) for row in (data[offset:offset+num_samples])]
+            else:
+                assert False, f"Unknown file format: Expected '.pkl' or '.json', but got '{ending}'"
         else:
             # Sample points randomly in [0, 1] square
             self.data = [torch.FloatTensor(size, 2).uniform_(0, 1) for i in range(num_samples)]

@@ -1,7 +1,8 @@
-from torch.utils.data import Dataset
-import torch
 import os
+import json
+import torch
 import pickle
+from torch.utils.data import Dataset
 
 from problems.vrp.state_cvrp import StateCVRP
 from problems.vrp.state_sdvrp import StateSDVRP
@@ -170,11 +171,33 @@ class VRPDataset(Dataset):
 
         self.data_set = []
         if filename is not None:
-            assert os.path.splitext(filename)[1] == '.pkl'
+            assert os.path.isfile(filename), f"File {filename} does not exist"
 
-            with open(filename, 'rb') as f:
-                data = pickle.load(f)
-            self.data = [make_instance(args) for args in data[offset:offset+num_samples]]
+            ending = os.path.splitext(filename)[1]
+            if ending == '.pkl':
+                with open(filename, 'rb') as f:
+                    data = pickle.load(f)
+                self.data = [make_instance(args) for args in data[offset:offset+num_samples]]
+            
+            elif ending == '.json':
+                
+                CAPACITIES = {
+                    20: 30.,
+                    50: 40.,
+                    100: 50.
+                }
+                
+                with open(filename, 'r') as f:
+                    data = json.load(f)
+                    self.data = [
+                        {
+                            'loc': torch.FloatTensor(data['nodes']),
+                            'demand': (torch.FloatTensor(size).uniform_(0, 9).int() + 1).float() / CAPACITIES[size],
+                            'depot': torch.FloatTensor(data['depot']),
+                        }
+                    ]
+            else:
+                assert False, f"Unknown file format: Expected '.pkl' or '.json', but got '{ending}'"
 
         else:
 
@@ -197,7 +220,7 @@ class VRPDataset(Dataset):
             ]
 
         self.size = len(self.data)
-
+    
     def __len__(self):
         return self.size
 

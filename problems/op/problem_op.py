@@ -1,7 +1,8 @@
-from torch.utils.data import Dataset
-import torch
 import os
+import json
+import torch
 import pickle
+from torch.utils.data import Dataset
 from problems.op.state_op import StateOP
 from utils.beam_search import beam_search
 
@@ -113,19 +114,50 @@ class OPDataset(Dataset):
 
         self.data_set = []
         if filename is not None:
-            assert os.path.splitext(filename)[1] == '.pkl'
+            assert os.path.isfile(filename), f"File {filename} does not exist"
 
-            with open(filename, 'rb') as f:
-                data = pickle.load(f)
-                self.data = [
-                    {
-                        'loc': torch.FloatTensor(loc),
-                        'prize': torch.FloatTensor(prize),
-                        'depot': torch.FloatTensor(depot),
-                        'max_length': torch.tensor(max_length)
-                    }
-                    for depot, loc, prize, max_length in (data[offset:offset+num_samples])
-                ]
+            ending = os.path.splitext(filename)[1]
+            if ending == '.pkl':
+                with open(filename, 'rb') as f:
+                    data = pickle.load(f)
+                    self.data = [
+                        {
+                            'loc': torch.FloatTensor(loc),
+                            'prize': torch.FloatTensor(prize),
+                            'depot': torch.FloatTensor(depot),
+                            'max_length': torch.tensor(max_length)
+                        }
+                        for depot, loc, prize, max_length in (data[offset:offset+num_samples])
+                    ]
+            elif ending == '.json':
+                
+                LIMITS = {
+                    20: 2.,
+                    50: 3.,
+                    100: 4.
+                }
+                    
+                
+                with open(filename, 'r') as f:
+                    data = json.load(f)
+                    if distribution == 'const':
+                        prize = torch.ones(size)
+                    elif distribution == 'unif':
+                        prize = (1 + torch.randint(0, 100, size=(size, ))) / 100.
+                    else:  # Based on distance to depot
+                        assert distribution == 'dist'
+                        prize_ = (torch.FloatTensor(data['depot'])[None, :] - torch.FloatTensor(data['nodes'])).norm(p=2, dim=-1)
+                        prize = (1 + (prize_ / prize_.max(dim=-1, keepdim=True)[0] * 99).int()).float() / 100.
+                    self.data = [
+                        {
+                            'loc': torch.FloatTensor(data['nodes']),
+                            'prize': torch.FloatTensor(prize),
+                            'depot': torch.FloatTensor(data['depot']),
+                            'max_length': torch.tensor(LIMITS[size])
+                        }
+                    ]
+            else:
+                assert False, f"Unknown file format: Expected '.pkl' or '.json', but got '{ending}'"
         else:
             self.data = [
                 generate_instance(size, prize_type)
